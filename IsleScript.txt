@@ -1,0 +1,175 @@
+integer listen_handle;
+integer listen_handle_private;
+integer channel = 30028; ///////////
+integer type=0; //Farbe und Typ des Knoten
+integer index=0;
+vector startpos;
+float autoUpdatePos=0.5;
+float autoUpdatePosCounter=0;
+
+
+list particle_parameters;
+
+string ownKey;
+
+list MENU_MAIN = ["Set Start", "Set Goal", "Set Invisible", "Set Visible"]; // das Hauptmenue
+
+default{
+    state_entry(){
+        //llSetText("Touch me to destroy me", <0,1,0>, 1.0);
+        llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <1.0, 1.0, 1.0>, 1.0]);
+        //llSetText("", <0,1,1>, 1.0);
+        //llTargetOmega( vector axis, float spinrate, float gain );
+        llTargetOmega(<0.0,0.0,0.001>,TWO_PI,1.0);
+        listen_handle = llListen(channel, "", "", "");
+        startpos=llGetPos();
+        
+        llSetVehicleType(VEHICLE_TYPE_BALLOON);
+        
+        llSetVehicleFloatParam( VEHICLE_HOVER_HEIGHT, 0 );
+        llSetVehicleFloatParam( VEHICLE_HOVER_EFFICIENCY, 0.5 );
+        llSetVehicleFloatParam( VEHICLE_HOVER_TIMESCALE, 1 );
+        
+        //llSetStatus(STATUS_PHYSICS, TRUE);
+        
+        particle_parameters = [  // start of particle settings
+           // Texture Parameters:
+           PSYS_SRC_TEXTURE, llGetInventoryName(INVENTORY_TEXTURE, 0), 
+           PSYS_PART_START_SCALE, <1.2, 1.2, FALSE>,  PSYS_PART_END_SCALE, <0.0, 2.0, FALSE>, 
+           PSYS_PART_START_COLOR, <.2,.2,1>,          PSYS_PART_END_COLOR, <.5,1,1>, 
+           PSYS_PART_START_ALPHA, (float)1.0,         PSYS_PART_END_ALPHA, (float)0.0,     
+         
+           // Production Parameters:
+           PSYS_SRC_BURST_PART_COUNT, (integer) 1, 
+           PSYS_SRC_BURST_RATE, (float) 0.01,  
+           PSYS_PART_MAX_AGE, (float)1.0, 
+           PSYS_SRC_MAX_AGE,(float) 0.0,  
+        
+           // Placement Parameters:
+           PSYS_SRC_PATTERN, (integer)8, // 1=DROP, 2=EXPLODE, 4=ANGLE, 8=ANGLE_CONE,
+           
+           // Placement Parameters (for any non-DROP pattern):
+           PSYS_SRC_BURST_SPEED_MIN, (float).01,   PSYS_SRC_BURST_SPEED_MAX, (float)3.01, 
+        // PSYS_SRC_BURST_RADIUS, 0.0,
+        
+           // Placement Parameters (only for ANGLE & CONE patterns):
+           PSYS_SRC_ANGLE_BEGIN, (float) 0.98*PI,        PSYS_SRC_ANGLE_END,(float) 1.00*PI,  
+           PSYS_SRC_OMEGA, <0,0,0>, 
+        
+           // After-Effect & Influence Parameters:
+           PSYS_SRC_ACCEL, <0.0,0.0,0.0>,  
+        // PSYS_SRC_TARGET_KEY,      llGetLinkKey(llGetLinkNumber() + 1),       
+              
+           PSYS_PART_FLAGS, (integer)( 0           // Texture Options:     
+                                | PSYS_PART_INTERP_COLOR_MASK   
+                                | PSYS_PART_INTERP_SCALE_MASK   
+                                | PSYS_PART_EMISSIVE_MASK   
+                                | PSYS_PART_FOLLOW_VELOCITY_MASK
+                                                  // After-effect & Influence Options:
+                             // | PSYS_PART_WIND_MASK            
+                             // | PSYS_PART_BOUNCE_MASK          
+                             // | PSYS_PART_FOLLOW_SRC_MASK     
+                             // | PSYS_PART_TARGET_POS_MASK     
+                             // | PSYS_PART_TARGET_LINEAR_MASK     
+                            ) 
+            //end of particle settings                     
+        ];
+        
+        llParticleSystem( particle_parameters );
+        
+        llSetTimerEvent(autoUpdatePos);
+    }
+
+    on_rez(integer start_param){
+        type=start_param%100;
+        index=(start_param-type)/100;
+        
+        if(type==0)      llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <0.0, 0.0, 0.0>, 0.2]);    //Wand
+        else if(type==2) llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <0.0, 0.0, 1.0>, 1.0]);    //Start
+        else if(type==3) llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <0.0, 1.0, 0.0>, 1.0]);    //Ziel
+        else llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <1.0, 1.0, 1.0>, 1.0]);    //Normal
+        
+        //llSetPrimitiveParams([PRIM_SIZE, <0.5, 2.503, start_param>]);
+        ownKey=(string)llGetKey();
+        
+        
+        listen_handle_private = llListen(-channel-index, "", "", "");
+    }
+    
+    touch_start(integer total_number){
+        
+        //notify "owner"
+        //llSay(37888, "rezagain");
+        //llDie();
+        //llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <1.0, 1.0, 1.0>, 1.0]);
+        //llSay(0, "TEST");
+        
+        llDialog(llDetectedKey(0), "Was moechtest du machen?", MENU_MAIN, -channel-index); // Zeigt den Dialog zum Anklicken an
+        
+    }
+    
+    listen(integer ch, string name, key id, string message){
+        if(channel==ch){
+            if(message=="cleanup") llDie(); //Auf einem offenen Kanal
+            else if(message==((string)ownKey)+"GB") llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <0.0, 1.0, 1.0>, 1.0]);
+            else if(message==((string)ownKey)+"R")  llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <1.0, 0.0, 0.0>, 1.0]);
+            else if(message==((string)ownKey)+"G")  llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <0.0, 1.0, 0.0>, 1.0]);
+            else if(message==((string)ownKey)+"B")  llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <0.0, 0.0, 1.0>, 1.0]);
+            else if(message==((string)ownKey)+"W")  llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <1.0, 1.0, 1.0>, 1.0]);
+        }
+        else if(ch==-channel-index){
+            if(message=="cleanup") llDie(); //Auf einem privaten Kanal
+            else if(message=="GB") llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <0.0, 1.0, 1.0>, 1.0]);
+            else if(message=="R")  llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <1.0, 0.0, 0.0>, 1.0]);
+            else if(message=="G")  llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <0.0, 1.0, 0.0>, 1.0]);
+            else if(message=="B")  llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <0.0, 0.0, 1.0>, 1.0]);
+            else if(message=="W")  llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <1.0, 1.0, 1.0>, 1.0]);
+            else if(llListFindList(MENU_MAIN, [message]) != -1){  // verifiziert die Wahl des Dialogs
+                llSay(0, name + " hat sich fuer folgende Option entschieden: '" + message + "'."); // gibt die Antwort aus
+    
+                if(message == "Set Start"){
+                    llSay(0, "Insel "+(string)index+" als StartInsel gesetzt!");
+                    llRegionSay(channel,"setIsle,"+(string)index+",2");
+                    llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <0.0, 0.0, 1.0>, 1.0]);
+                    //MENU_MAIN+=["Reset Graph"];
+                }
+                else if(message == "Set Goal"){
+                    llSay(0, "Insel "+(string)index+" als Zielinsel gesetzt!");
+                    llRegionSay(channel,"setIsle,"+(string)index+",3");
+                    llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <0.0, 1.0, 0.0>, 1.0]);
+                    //MENU_MAIN=llDeleteSubList(MENU_MAIN,llGetListLength(MENU_MAIN)-1,llGetListLength(MENU_MAIN)-1);
+                }
+                else if(message == "Set Invisible"){
+                    llSay(0, "Insel "+(string)index+" als Zielinsel gesetzt!");
+                    llRegionSay(channel,"setIsle,"+(string)index+",0");
+                    llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <0.0, 0.0, 0.0>, 0.2]);    //Wand
+                    //MENU_MAIN=llDeleteSubList(MENU_MAIN,llGetListLength(MENU_MAIN)-1,llGetListLength(MENU_MAIN)-1);
+                }
+                else if(message == "Set Visible"){
+                    llSay(0, "Insel "+(string)index+" als Zielinsel gesetzt!");
+                    llRegionSay(channel,"setIsle,"+(string)index+",1");
+                    llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <1.0, 1.0, 1.0>, 1.0]);
+                    //MENU_MAIN=llDeleteSubList(MENU_MAIN,llGetListLength(MENU_MAIN)-1,llGetListLength(MENU_MAIN)-1);
+                }
+    
+            }
+            else llSay(0, name + " ungueltige Option ausgewaehlt '" + llToLower(message) + "'."); // eine ungueltige Wahl eines Dialogs
+        }
+    }
+    
+    timer(){ 
+        //llRegionSay(30028, "cleanup");
+        //llSay(0, "Insel-Such-Graph wurde nach einer Stunde ohne Benutzung aufgeraeumt!");
+        //state default;   //Alles aufraeumen
+        autoUpdatePosCounter+=1;
+        
+        llSetPos(startpos+<0, 0, 0.1*llSin(autoUpdatePosCounter)>);
+        llSetTimerEvent(autoUpdatePos);
+    }
+        
+    state_exit(){
+        llListenRemove(listen_handle);
+    }
+    
+}
+

@@ -1,0 +1,823 @@
+integer listen_handle;
+integer channel = 30028; // KANAL
+integer i;
+integer j;
+integer xx;
+integer yy;
+float turtleX;
+float turtleY;
+float turtleXX;
+float turtleYY;
+float abst; //Abstand zwischen benachbarten Inseln
+integer itmp;
+integer posprevious;
+integer saveRezzed=TRUE;
+
+list knoten;
+list useKnoten;     //Brauche mehrere Listen, wegen der maximal 72Objekte pro Liste
+//list useKnoten2;
+//list useKnoten3;
+//list useKnoten4;
+integer knotenNumb;
+list grid; integer cols;
+list searchGrid;
+integer start=-1;
+integer ziel=-1;
+list ltmp;
+
+vector startpos;
+float height;
+
+integer searched=FALSE;
+list str;
+list MENU_REZZED_MAIN = ["Backtracking", "Cleanup", "Switch start and goal"]; // das Hauptmenue
+list MENU_REZZED_OPTIONS = ["...Zurueck"]; // ein Untermenue
+
+integer autoCleanUp=3600;   //llSetTimerEvent(autoCleanUp);  //Nach einer Stunde aufraeumen
+
+list particle_parameters;
+
+setIsleColor(integer number, string color){
+    llRegionSay(30028, llList2String(knoten, number)+color);
+}
+
+moveTurtleIndex(integer index){//Schildkroete bewegen
+    integer xx = index % cols;
+    moveTurtle(xx, (index-xx) / cols);
+}
+
+moveTurtle(integer xx, integer yy){//Schildkroete bewegen
+    while(turtleXX!=xx || turtleYY!=yy){
+
+        if(turtleXX>xx) turtleXX--;
+        else if(turtleXX<xx) turtleXX++;
+        
+        if(turtleYY>yy) turtleYY--;
+        else if(turtleYY<yy) turtleYY++;
+        
+        turtleX=startpos.x+(turtleXX-cols/2)*abst;
+        turtleY=startpos.y+(cols-turtleYY)*abst;
+        llRegionSay(30028, "Turtle,"+
+             (string)(turtleX)+","+
+                (string)(turtleY)+","+
+                (string)(startpos.z+1.3));
+    }
+}
+
+moveRezzer(float x, float y){//SuchRezzer bewegen (Absolute Koordinaten)
+    vector pos=llGetPos();
+    while(llFabs(pos.x-x)>abst || llFabs(pos.y-y)>abst){
+
+        if(pos.x>x-0.1) pos.x-=abst;
+        else if(pos.x<x+0.1) pos.x+=abst;
+        
+        if(pos.y>y-0.1) pos.y-=abst;
+        else if(pos.y<y+0.1) pos.y+=abst;
+                
+        llSetPrimitiveParams([PRIM_POSITION, pos]);
+
+    }
+}
+
+integer backtracking(integer pos){ 
+    
+    if(pos<0 || pos>cols*cols){
+        //llSay(0, "Ausserhalb des Graphen!");
+        return FALSE; //Hier ist nichts!
+    }
+
+    itmp=llList2Integer(searchGrid,pos); 
+    
+    if(itmp==0 || itmp==4){
+        //if(itmp==0) llSay(0, "Knoten ist inaktiv!");
+        //if(itmp==4) llSay(0, "Knoten wurde schon besucht!");
+        return FALSE; //Hier nicht mehr suchen, oder WAND!
+    }
+    
+    integer xx = pos % cols;
+    integer yy = (pos-xx) / cols;
+    
+    //Schildkroete bewegen
+    moveTurtle(xx,yy);
+    posprevious=pos;
+    
+    if(itmp==3){
+        llSay(0, "ZIEL GEFUNDEN!"); 
+        return TRUE; //Ziel gefunden
+    }
+    
+    integer gefunden=FALSE;
+    searchGrid=llListReplaceList(searchGrid, [4], pos, pos);
+    //llSay(0, llDumpList2String(searchGrid,","));
+
+    //Insel einfaerben
+    setIsleColor(pos,"GB");
+    
+    //llSay(0, llList2String(knoten, pos)+"GB");
+    
+    //llSay(0, "Gehe HOCH");
+    gefunden=backtracking(pos-cols); //Im Uhrzeigersinn testen
+    if(gefunden) return TRUE;
+    //Schildkroete bewegen
+    if(posprevious!=pos){
+        moveTurtle(xx,yy);
+        posprevious=pos;
+    }
+    if(xx<cols-1){
+        //llSay(0, "Gehe RECHTS");
+        gefunden=backtracking(pos+1);
+        if(gefunden) return TRUE;
+    }
+    //Schildkroete bewegen
+    if(posprevious!=pos){
+        moveTurtle(xx,yy);
+        posprevious=pos;
+    }
+    //llSay(0, "Gehe RUNTER");
+    gefunden=backtracking(pos+cols);
+    if(gefunden) return TRUE;
+    //Schildkroete bewegen
+    if(posprevious!=pos){
+        moveTurtle(xx,yy);
+        posprevious=pos;
+    }
+    if(xx>0){
+        //llSay(0, "Gehe LINKS");
+        gefunden=backtracking(pos-1);
+        if(gefunden) return TRUE;
+    }
+    //Schildkroete bewegen
+    if(posprevious!=pos){
+        moveTurtle(xx,yy);
+        posprevious=pos;
+    }
+        
+    searchGrid=llListReplaceList(searchGrid, [1], pos, pos);
+    
+    //Insel einfaerben
+    setIsleColor(pos,"R");
+    //llSay(0, llList2String(knoten, pos)+"R");
+    
+    //llSay(0, "BACK");
+    return FALSE; 
+} 
+
+
+default{
+    state_entry(){
+        startpos=llGetPos();
+        height=startpos.z;
+        
+        //llSay(0, "Hello, Avatar!");
+        llSetText("", <0,1,0>, 1.0);
+        llTargetOmega(<0.4,0.7,0.3>,TWO_PI,1.0);
+        listen_handle = llListen(30028, "", "", "rezz");
+        
+        if(searched){
+            MENU_REZZED_MAIN=llDeleteSubList(MENU_REZZED_MAIN,llGetListLength(MENU_REZZED_MAIN)-1,llGetListLength(MENU_REZZED_MAIN)-1);
+            searched=FALSE;
+        }
+        
+        particle_parameters = [  // start of particle settings
+            // Texture Parameters:
+            //PSYS_SRC_TEXTURE, llGetInventoryName(INVENTORY_TEXTURE, 0), 
+            PSYS_PART_START_SCALE, <0.1, .1, FALSE>, PSYS_PART_END_SCALE, <.01,.1, FALSE>, 
+            PSYS_PART_START_COLOR, <0,0,1>,          PSYS_PART_END_COLOR, <.8,.8,1>, 
+            PSYS_PART_START_ALPHA,  (float)0.5,      PSYS_PART_END_ALPHA, (float)0.0,   
+            
+            // Production Parameters:
+            PSYS_SRC_BURST_PART_COUNT, (integer)30, 
+            PSYS_SRC_BURST_RATE, (float) 0.01,  
+            PSYS_PART_MAX_AGE, (float)5.0, 
+            PSYS_SRC_MAX_AGE,(float) 0.0,  
+            
+            // Placement Parameters:
+            PSYS_SRC_PATTERN,  PSYS_SRC_PATTERN_ANGLE,//(integer)4, // 1=DROP, 2=EXPLODE, 4=ANGLE, 8=ANGLE_CONE,
+            
+            // Placement Parameters (for any non-DROP pattern):
+            PSYS_SRC_BURST_SPEED_MIN, (float).5,   PSYS_SRC_BURST_SPEED_MAX, (float).3, 
+            // PSYS_SRC_BURST_RADIUS, 0.0,
+            
+            // Placement Parameters (only for ANGLE & CONE patterns):
+            PSYS_SRC_ANGLE_BEGIN, (float) 0.1*PI,   PSYS_SRC_ANGLE_END, (float)0.5*PI,  
+            PSYS_SRC_OMEGA, <0.4,0.7,0.3>, 
+            
+            // After-Effect & Influence Parameters:
+            //PSYS_SRC_ACCEL, <0.0,0.0, 0.0 >,
+            //PSYS_SRC_TARGET_KEY,target,       
+              
+            PSYS_PART_FLAGS, (integer)( 0         // Texture Options:     
+                                | PSYS_PART_INTERP_COLOR_MASK   
+                                | PSYS_PART_INTERP_SCALE_MASK   
+                                | PSYS_PART_EMISSIVE_MASK   
+                                | PSYS_PART_FOLLOW_VELOCITY_MASK
+                                                  // After-effect & Influence Options:
+                             // | PSYS_PART_WIND_MASK            
+                             // | PSYS_PART_BOUNCE_MASK          
+                             // | PSYS_PART_FOLLOW_SRC_MASK     
+                              | PSYS_PART_TARGET_POS_MASK     
+                             // | PSYS_PART_TARGET_LINEAR_MASK   
+                            ) 
+            //end of particle settings                     
+        ];
+        
+        llParticleSystem( particle_parameters );
+    }
+
+    touch_start(integer total_number){
+
+        state rezzed;
+        
+    }
+    
+    listen( integer channel, string name, key id, string message ){
+        state rezzed;
+    }
+    
+    state_exit(){
+        llListenRemove(listen_handle);
+    }
+}
+
+state rezzed{
+    
+    state_entry(){
+        llSetTimerEvent(autoCleanUp);  //Nach einer Stunde aufraeumen
+        
+        cols=7;
+        abst=7.0; //Abstand zwischen benachbarten Inseln
+        grid =  [3, 0, 1, 0, 1, 1, 1,
+                 1, 0, 1, 1, 1, 0, 1,
+                 1, 0, 0, 1, 0, 0, 0,
+                 1, 0, 2, 1, 1, 1, 1,
+                 1, 1, 1, 0, 1, 0, 1,
+                 0, 1, 0, 1, 0, 1, 1,
+                 1, 1, 1, 1, 1, 1, 0];
+        
+        for(i=0; i<llGetListLength(grid); i++){
+            itmp=llList2Integer(grid,i);
+            if(itmp==2) start=i;
+            else if(itmp==3) ziel=i;  
+        }
+        
+        knoten=[];
+        useKnoten=[];
+        //useKnoten2=[];
+        //useKnoten3=[];
+        //useKnoten4=[];
+        knotenNumb=0;
+        
+        //for(j=0; j<cols; j++)  llSetPrimitiveParams([PRIM_POSITION, llGetPos()+<-abst/2, abst, 0>]);
+        //llSetPrimitiveParams ([PRIM_POSITION, llGetPos()+<(-cols/2)*abst, cols*abst, 0>]);
+        
+        if(cols%2==0){
+            for(j=0; j<cols/2; j++)  llSetPrimitiveParams([PRIM_POSITION, llGetPos()+<abst, abst/(cols/2), 0>]);//Eins vor , ganz rechts
+        }
+        else{
+            for(j=0; j<cols/2; j++)  llSetPrimitiveParams([PRIM_POSITION, llGetPos()+<-abst, abst/(cols/2), 0>]);//Eins vor , ganz links  
+        }
+        
+        
+        //INSELN
+        for(j=llGetListLength(grid)-1; j>=0; j--){
+            
+            i=j;
+            
+            xx = i % cols;
+            yy = (i-xx) / cols;
+            
+            if((i%(2*cols)<cols)){
+                i-=xx;
+                xx=cols-xx-1;
+                i+=xx;
+            }
+            
+            itmp=llList2Integer(grid,i);
+            
+            llRezObject("Isle",             //object name in inventory
+                startpos+<(xx-cols/2)*abst,(cols-yy)*abst,0>,//position          
+                <0.0, 0.0, 0.0>,            //velocity
+                <0.0, 0.0, 0.0, 0.0>,       //rotation
+                itmp+100*i);                      //event parameter (Knotentyp)
+            if(itmp<72) useKnoten+=[TRUE];
+            //else if(itmp<144) useKnoten2+=[TRUE];
+            //else if(itmp<216) useKnoten3+=[TRUE];
+            //else if(itmp<288) useKnoten4+=[TRUE];
+            
+            
+            
+            //"Umbruch" nach jeder Zeile
+            if(j % cols == 0 && j>0){
+                llSetPrimitiveParams ([PRIM_POSITION, llGetPos()+<0, abst, 0>]);
+            }
+            else{
+                //Ein "Feld" nach links oder rechts
+                if(j>0){
+                    if((i%(2*cols)<cols)) llSetPrimitiveParams ([PRIM_POSITION, llGetPos()+<abst, 0, 0>]);
+                    else llSetPrimitiveParams ([PRIM_POSITION, llGetPos()-<abst, 0, 0>]);
+                }
+            }
+        }
+        
+        
+        for(j=0; j<llGetListLength(grid); j++){
+            
+            i=j;
+            
+            xx = i % cols;
+            yy = (i-xx) / cols;
+            
+            if((i%(2*cols)<cols)){
+                i-=xx;
+                xx=cols-xx-1;
+                i+=xx;
+            }
+            
+            itmp=llList2Integer(grid,i);
+            
+            //"Umbruch" nach jeder Zeile
+            //if(i % cols == 0 && i>0){
+                //for(j=0; j<cols; j++) llSetPrimitiveParams ([PRIM_POSITION, llGetPos()+<-abst, -abst/cols, 0>]);
+            //}
+            
+            xx = i % cols;
+            yy = (i-xx) / cols;
+            
+            if(itmp>0){    //Hier wird wirklich gerezzd
+
+                //Such-Schildkroete
+                if(itmp==2){
+                    turtleXX=xx;
+                    turtleYY=yy;
+                    turtleX=startpos.x+(turtleXX-cols/2)*abst;
+                    turtleY=startpos.y+(cols-turtleYY)*abst;
+                    llRezObject("SearchTurtle", //object name in inventory
+                    startpos+<(xx-cols/2)*abst,(cols-yy)*abst,1.3>,//position          
+                    <0.0, 0.0, 0.0>,            //velocity
+                    <0.0, 0.0, 0.0, 0.0>,       //rotation
+                    0);                         //event parameter (not used)
+                    if(itmp<72) useKnoten+=[FALSE];
+                    //else if(itmp<144) useKnoten2+=[FALSE];
+                    //else if(itmp<216) useKnoten3+=[FALSE];
+                    //else if(itmp<288) useKnoten4+=[FALSE];
+                }
+                
+                
+                //Bruecken bauen
+                if(xx<cols-1){//Rechts kann noch was sein
+                    if(llList2Integer(grid,i+1)){//Rechts daneben ist eine Insel
+                        //Bruecke nach rechts bauen
+                        llRezObject("Bridge",           //object name in inventory
+                            startpos+<(xx-cols/2)*abst+abst/2,(cols-yy)*abst,0.3>,//position          
+                            <0.0, 0.0, 0.0>,                        //velocity
+                            llEuler2Rot(<0, 270, 0> * DEG_TO_RAD), //rotation
+                            i*100+llCeil(abst));  //event parameter (Scalierung)
+                            if(itmp<72) useKnoten+=[FALSE];
+                            //else if(itmp<144) useKnoten2+=[FALSE];
+                            //else if(itmp<216) useKnoten3+=[FALSE];
+                            //else if(itmp<288) useKnoten4+=[FALSE];
+                    }
+                }
+                if(yy<cols-1){//Unten kann noch was sein
+                    if(llList2Integer(grid,i+cols)){//Unten daneben ist eine Insel
+                        //Bruecke nach unten bauen
+                        llRezObject("Bridge",           //object name in inventory
+                            startpos+<(xx-cols/2)*abst,(cols-yy)*abst-abst/2,0.3>,//position          
+                            <0.0, 0.0, 0.0>,            //velocity
+                            llEuler2Rot(<270, 0, 270> * DEG_TO_RAD), //rotation
+                            -(i*100+llCeil(abst)));  //event parameter (Scalierung)
+                        if(itmp<72) useKnoten+=[FALSE];
+                        //else if(itmp<144) useKnoten2+=[FALSE];
+                        //else if(itmp<216) useKnoten3+=[FALSE];
+                        //else if(itmp<288) useKnoten4+=[FALSE];
+                    }
+                }
+                
+                //llRegionSay(30028, "setSize");
+                
+                //llSetPrimitiveParams ([PRIM_SIZE, llGetScale()]);
+                
+            }
+            
+            //Ein "Feld" nach rechts
+            //llSetPrimitiveParams ([PRIM_POSITION, llGetPos()+<abst, 0, 0>]);
+            
+            //"Umbruch" nach jeder Zeile
+            if(j % cols == cols-1){
+                llSetPrimitiveParams ([PRIM_POSITION, llGetPos()-<0, abst, 0>]);
+            }
+            else{
+                //Ein "Feld" nach links oder rechts
+                if((i%(2*cols)>=cols)) llSetPrimitiveParams ([PRIM_POSITION, llGetPos()+<abst, 0, 0>]);
+                else llSetPrimitiveParams ([PRIM_POSITION, llGetPos()-<abst, 0, 0>]);
+            }
+        }
+        
+        if(cols%2==0){//Zurueck zur Startposition
+            for(j=0; j<cols/2; j++) llSetPrimitiveParams([PRIM_POSITION, llGetPos()+<-abst, abst/(cols/2), 0>]);//Eins hinter , links
+        }
+        else{
+            for(j=0; j<cols/2; j++) llSetPrimitiveParams([PRIM_POSITION, llGetPos()+< abst, abst/(cols/2), 0>]);//Eins hinter , recht 
+        }
+        llSetPrimitiveParams ([PRIM_POSITION, startpos]);
+
+        
+        //llSay(0, "Hello, Avatar!");
+        //llTargetOmega(<0.6,1.0,0.4>,TWO_PI,1.0);
+        listen_handle = llListen(30028, "", "", "");
+        
+    }
+    
+    timer(){ 
+        llRegionSay(30028, "cleanup");
+        llSay(0, "Insel-Such-Graph wurde nach einer Stunde ohne Benutzung aufgeraeumt!");
+        state default;   //Alles aufraeumen
+    }
+    
+    object_rez(key id){
+        
+        if(knotenNumb<72){
+            if(llGetListLength(useKnoten)>knotenNumb){
+                if(llList2Integer(useKnoten, knotenNumb)){
+                    if(cols%2==0){
+                        if(llGetListLength(knoten)%(2*cols)<cols) knoten = [id]+knoten;
+                        else knoten=llListInsertList(knoten, [id], llGetListLength(knoten)%cols);
+                    }
+                    else{
+                        if(llGetListLength(knoten)%(2*cols)<cols) knoten=llListInsertList(knoten, [id], llGetListLength(knoten)%cols);
+                        else knoten = [id]+knoten;
+                    }
+                    
+                }
+            }
+        }
+        //else if(knotenNumb<144) {if(llList2Integer(useKnoten2, knotenNumb-72)) knoten += [id];}
+        //else if(knotenNumb<216) {if(llList2Integer(useKnoten3, knotenNumb-144)) knoten += [id];}
+        //else if(knotenNumb<288) {if(llList2Integer(useKnoten4, knotenNumb-216)) knoten += [id];}
+        
+        knotenNumb++;
+        llSetText("Anzahl der Inseln: "+(string)llGetListLength(knoten)+"\nAnzahl on_rez: "+(string)knotenNumb, <0,1,1>, 1.0);
+    }
+    
+    touch_start(integer total_number)
+    {
+        llDialog(llDetectedKey(0), "Was möchtest du machen?", MENU_REZZED_MAIN, 30028); // Zeigt den Dialog zum Anklicken an
+        
+        //llRegionSay(30028, "cleanup");
+        //state default;
+    }
+ 
+    listen(integer channel, string name, key id, string message){
+        
+        if(message=="cleanup"){
+            llRegionSay(30028, "cleanup");
+            state default;   //Alles aufraeumen
+        }
+        else{
+            str=llParseString2List(message ,[","],[]);
+            if(llList2String(str,0)=="setIsle"){
+                itmp=llList2Integer(str,1);
+                integer old=llList2Integer(grid,itmp);
+                integer new=llList2Integer(str,2);
+                if(new==0){//Wand
+                    if(old!=0){//Nur wenn neu
+                        grid=llListReplaceList(grid, [0], itmp, itmp);
+                        if(llGetListLength(searchGrid)>itmp) searchGrid=llListReplaceList(searchGrid, [0], itmp, itmp);
+                        //!!!Bruecken entfernen!!!
+                        if(itmp%cols>0){//Wenn links noch Platz
+                            if(llList2Integer(grid,itmp-1)>0){//Links daneben ist eine Insel (Also auch eine Bruecke)
+                                llRegionSay(30028, "KillBridge,"+(string)(itmp-1)+","+(string)TRUE);
+                            }
+                        }
+                        if(itmp>=cols){//Wenn oben noch Platz
+                            if(llList2Integer(grid,itmp-cols)>0){//Oben daneben ist eine Insel (Also auch eine Bruecke)
+                                llRegionSay(30028, "KillBridge,"+(string)(itmp-cols)+","+(string)FALSE);
+                            }
+                        }
+                        if(itmp%cols<cols-1){//Wenn rechts noch Platz
+                            if(llList2Integer(grid,itmp+1)>0){//Rechts daneben ist eine Insel (Also auch eine Bruecke)
+                                llRegionSay(30028, "KillBridge,"+(string)(itmp)+","+(string)TRUE);
+                            }
+                        }
+                        if(itmp<cols*cols-cols){//Wenn unten noch Platz
+                            if(llList2Integer(grid,itmp+cols)>0){//Unten daneben ist eine Insel (Also auch eine Bruecke)
+                                llRegionSay(30028, "KillBridge,"+(string)(itmp)+","+(string)FALSE);
+                            }
+                        }
+                        
+                        if(old==2){//Neuen Startpunkt suchen
+                            start=-1;
+                            for(i=0; i<llGetListLength(grid); i++){
+                                if(llList2Integer(grid,i)==1){//Gefunden
+                                    start=i;
+                                    grid=llListReplaceList(grid, [2], start, start);
+                                    if(llGetListLength(searchGrid)>start) searchGrid=llListReplaceList(searchGrid, [2], start, start);
+                                    setIsleColor(start, "B");
+                                    moveTurtleIndex(i);
+                                    i=llGetListLength(grid);
+                                }    
+                            }
+                        }
+                        else if(old==3){//Neuen Zielpunkt suchen
+                            ziel=-1;
+                            for(i=0; i<llGetListLength(grid); i++){
+                                if(llList2Integer(grid,i)==1){//Gefunden
+                                    ziel=i;
+                                    grid=llListReplaceList(grid, [3], ziel, ziel);
+                                    if(llGetListLength(searchGrid)>ziel) searchGrid=llListReplaceList(searchGrid, [3], ziel, ziel);
+                                    setIsleColor(start, "G");
+                                    i=llGetListLength(grid);
+                                }    
+                            }
+                        }
+                    }
+                }
+                else if(new==1){//Normaler Weg
+                    if(old!=1){//Nur wenn neu
+                        grid=llListReplaceList(grid, [1], itmp, itmp);
+                        if(llGetListLength(searchGrid)>itmp) searchGrid=llListReplaceList(searchGrid, [1], itmp, itmp);
+                        
+                        if(old==0){//Neue Bruecken muessen gebaut werden
+                            if(itmp%cols>0){//Wenn links noch Platz
+                                if(llList2Integer(grid,itmp-1)>0){//Links daneben ist eine Insel (Also neue Bruecke)
+                                    xx = (itmp-1) % cols;
+                                    yy = (itmp-1-xx) / cols;
+                                    moveRezzer(startpos.x+(xx-cols/2)*abst+abst/2, startpos.y+(cols-yy)*abst);
+                                    llRezObject("Bridge",           //object name in inventory
+                                        startpos+<(xx-cols/2)*abst+abst/2,(cols-yy)*abst,0.3>,//position          
+                                        <0.0, 0.0, 0.0>,                        //velocity
+                                        llEuler2Rot(<0, 270, 0> * DEG_TO_RAD), //rotation
+                                        (itmp-1)*100+llCeil(abst));  //event parameter (Scalierung)
+                                }
+                            
+                            }
+                            if(itmp>=cols){//Wenn oben noch Platz
+                                if(llList2Integer(grid,itmp-cols)>0){//Oben daneben ist eine Insel (Also neue Bruecke)
+                                    xx = (itmp-cols) % cols;
+                                    yy = (itmp-cols-xx) / cols;
+                                    moveRezzer(startpos.x+(xx-cols/2)*abst+abst/2, startpos.y+(cols-yy)*abst);
+                                    llRezObject("Bridge",           //object name in inventory
+                                        startpos+<(xx-cols/2)*abst,(cols-yy)*abst-abst/2,0.3>,//position          
+                                        <0.0, 0.0, 0.0>,            //velocity
+                                        llEuler2Rot(<270, 0, 270> * DEG_TO_RAD), //rotation
+                                        -((itmp-cols)*100+llCeil(abst)));  //event parameter (Scalierung)
+                                }
+                            }
+                            if(itmp%cols<cols-1){//Wenn rechts noch Platz
+                                if(llList2Integer(grid,itmp+1)>0){//Rechts daneben ist eine Insel (Also neue Bruecke)
+                                    xx = itmp % cols;
+                                    yy = (itmp-xx) / cols;
+                                    moveRezzer(startpos.x+(xx-cols/2)*abst+abst/2, startpos.y+(cols-yy)*abst);
+                                    llRezObject("Bridge",           //object name in inventory
+                                        startpos+<(xx-cols/2)*abst+abst/2,(cols-yy)*abst,0.3>,//position          
+                                        <0.0, 0.0, 0.0>,                        //velocity
+                                        llEuler2Rot(<0, 270, 0> * DEG_TO_RAD), //rotation
+                                        itmp*100+llCeil(abst));  //event parameter (Scalierung)
+                                }
+                            }
+                            if(itmp<cols*cols-cols){//Wenn unten noch Platz
+                                if(llList2Integer(grid,itmp+cols)>0){//Unten daneben ist eine Insel (Also neue Bruecke)
+                                    xx = itmp % cols;
+                                    yy = (itmp-xx) / cols;
+                                    moveRezzer(startpos.x+(xx-cols/2)*abst+abst/2, startpos.y+(cols-yy)*abst);
+                                    llRezObject("Bridge",           //object name in inventory
+                                        startpos+<(xx-cols/2)*abst,(cols-yy)*abst-abst/2,0.3>,//position          
+                                        <0.0, 0.0, 0.0>,            //velocity
+                                        llEuler2Rot(<270, 0, 270> * DEG_TO_RAD), //rotation
+                                        -(itmp*100+llCeil(abst)));  //event parameter (Scalierung)
+                                }
+                            }
+                            moveRezzer(startpos.x, startpos.y);
+                        }
+                    }
+                }
+                else if(new==2){//Start
+                    if(old!=2){//Nur wenn neu
+                        if(old==3){//Wenn es vorher das Ziel war
+                            grid=llListReplaceList(grid, [3], start, start);
+                            if(llGetListLength(searchGrid)>start) searchGrid=llListReplaceList(searchGrid, [3], start, start);
+                            setIsleColor(start, "G");
+                            ziel=start;
+                        }
+                        else{//Alten Startpunkt entfernen
+                            grid=llListReplaceList(grid, [1], start, start);
+                            if(llGetListLength(searchGrid)>start) searchGrid=llListReplaceList(searchGrid, [1], start, start);
+                            setIsleColor(start, "W");
+                            
+                            if(old==0){//Neue Bruecken muessen gebaut werden
+                                if(itmp%cols>0){//Wenn links noch Platz
+                                    if(llList2Integer(grid,itmp-1)>0){//Links daneben ist eine Insel (Also neue Bruecke)
+                                        xx = (itmp-1) % cols;
+                                        yy = (itmp-1-xx) / cols;
+                                        moveRezzer(startpos.x+(xx-cols/2)*abst+abst/2, startpos.y+(cols-yy)*abst);
+                                        llRezObject("Bridge",           //object name in inventory
+                                            startpos+<(xx-cols/2)*abst+abst/2,(cols-yy)*abst,0.3>,//position          
+                                            <0.0, 0.0, 0.0>,                        //velocity
+                                            llEuler2Rot(<0, 270, 0> * DEG_TO_RAD), //rotation
+                                            (itmp-1)*100+llCeil(abst));  //event parameter (Scalierung)
+                                    }
+                                
+                                }
+                                if(itmp>=cols){//Wenn oben noch Platz
+                                    if(llList2Integer(grid,itmp-cols)>0){//Oben daneben ist eine Insel (Also neue Bruecke)
+                                        xx = (itmp-cols) % cols;
+                                        yy = (itmp-cols-xx) / cols;
+                                        moveRezzer(startpos.x+(xx-cols/2)*abst+abst/2, startpos.y+(cols-yy)*abst);
+                                        llRezObject("Bridge",           //object name in inventory
+                                            startpos+<(xx-cols/2)*abst,(cols-yy)*abst-abst/2,0.3>,//position          
+                                            <0.0, 0.0, 0.0>,            //velocity
+                                            llEuler2Rot(<270, 0, 270> * DEG_TO_RAD), //rotation
+                                            -((itmp-cols)*100+llCeil(abst)));  //event parameter (Scalierung)
+                                    }
+                                }
+                                if(itmp%cols<cols-1){//Wenn rechts noch Platz
+                                    if(llList2Integer(grid,itmp+1)>0){//Rechts daneben ist eine Insel (Also neue Bruecke)
+                                        xx = itmp % cols;
+                                        yy = (itmp-xx) / cols;
+                                        moveRezzer(startpos.x+(xx-cols/2)*abst+abst/2, startpos.y+(cols-yy)*abst);
+                                        llRezObject("Bridge",           //object name in inventory
+                                            startpos+<(xx-cols/2)*abst+abst/2,(cols-yy)*abst,0.3>,//position          
+                                            <0.0, 0.0, 0.0>,                        //velocity
+                                            llEuler2Rot(<0, 270, 0> * DEG_TO_RAD), //rotation
+                                            itmp*100+llCeil(abst));  //event parameter (Scalierung)
+                                    }
+                                }
+                                if(itmp<cols*cols-cols){//Wenn unten noch Platz
+                                    if(llList2Integer(grid,itmp+cols)>0){//Unten daneben ist eine Insel (Also neue Bruecke)
+                                        xx = itmp % cols;
+                                        yy = (itmp-xx) / cols;
+                                        moveRezzer(startpos.x+(xx-cols/2)*abst+abst/2, startpos.y+(cols-yy)*abst);
+                                        llRezObject("Bridge",           //object name in inventory
+                                            startpos+<(xx-cols/2)*abst,(cols-yy)*abst-abst/2,0.3>,//position          
+                                            <0.0, 0.0, 0.0>,            //velocity
+                                            llEuler2Rot(<270, 0, 270> * DEG_TO_RAD), //rotation
+                                            -(itmp*100+llCeil(abst)));  //event parameter (Scalierung)
+                                    }
+                                }
+                                moveRezzer(startpos.x, startpos.y);
+                            }
+                        }
+                        grid=llListReplaceList(grid, [2], itmp, itmp);
+                        moveTurtleIndex(itmp);
+                        if(llGetListLength(searchGrid)>itmp) searchGrid=llListReplaceList(searchGrid, [2], itmp, itmp);
+                        start=itmp;
+                    }
+                }
+                else if(new==3){//Ziel
+                    if(old!=3){//Nur wenn neu
+                        if(old==2){//Wenn es vorher der Start war
+                            grid=llListReplaceList(grid, [2], ziel, ziel);
+                            if(llGetListLength(searchGrid)>ziel) searchGrid=llListReplaceList(searchGrid, [2], ziel, ziel);
+                            setIsleColor(ziel, "B");
+                            moveTurtleIndex(ziel);
+                            start=ziel;
+                        }
+                        else{//Alten Startpunkt entfernen
+                            grid=llListReplaceList(grid, [1], ziel, ziel);
+                            if(llGetListLength(searchGrid)>ziel) searchGrid=llListReplaceList(searchGrid, [1], ziel, ziel);
+                            setIsleColor(ziel, "W");
+                            
+                            if(old==0){//Neue Bruecken muessen gebaut werden
+                                if(itmp%cols>0){//Wenn links noch Platz
+                                    if(llList2Integer(grid,itmp-1)>0){//Links daneben ist eine Insel (Also neue Bruecke)
+                                        xx = (itmp-1) % cols;
+                                        yy = (itmp-1-xx) / cols;
+                                        moveRezzer(startpos.x+(xx-cols/2)*abst+abst/2, startpos.y+(cols-yy)*abst);
+                                        llRezObject("Bridge",           //object name in inventory
+                                            startpos+<(xx-cols/2)*abst+abst/2,(cols-yy)*abst,0.3>,//position          
+                                            <0.0, 0.0, 0.0>,                        //velocity
+                                            llEuler2Rot(<0, 270, 0> * DEG_TO_RAD), //rotation
+                                            (itmp-1)*100+llCeil(abst));  //event parameter (Scalierung)
+                                    }
+                                
+                                }
+                                if(itmp>=cols){//Wenn oben noch Platz
+                                    if(llList2Integer(grid,itmp-cols)>0){//Oben daneben ist eine Insel (Also neue Bruecke)
+                                        xx = (itmp-cols) % cols;
+                                        yy = (itmp-cols-xx) / cols;
+                                        moveRezzer(startpos.x+(xx-cols/2)*abst+abst/2, startpos.y+(cols-yy)*abst);
+                                        llRezObject("Bridge",           //object name in inventory
+                                            startpos+<(xx-cols/2)*abst,(cols-yy)*abst-abst/2,0.3>,//position          
+                                            <0.0, 0.0, 0.0>,            //velocity
+                                            llEuler2Rot(<270, 0, 270> * DEG_TO_RAD), //rotation
+                                            -((itmp-cols)*100+llCeil(abst)));  //event parameter (Scalierung)
+                                    }
+                                }
+                                if(itmp%cols<cols-1){//Wenn rechts noch Platz
+                                    if(llList2Integer(grid,itmp+1)>0){//Rechts daneben ist eine Insel (Also neue Bruecke)
+                                        xx = itmp % cols;
+                                        yy = (itmp-xx) / cols;
+                                        moveRezzer(startpos.x+(xx-cols/2)*abst+abst/2, startpos.y+(cols-yy)*abst);
+                                        llRezObject("Bridge",           //object name in inventory
+                                            startpos+<(xx-cols/2)*abst+abst/2,(cols-yy)*abst,0.3>,//position          
+                                            <0.0, 0.0, 0.0>,                        //velocity
+                                            llEuler2Rot(<0, 270, 0> * DEG_TO_RAD), //rotation
+                                            itmp*100+llCeil(abst));  //event parameter (Scalierung)
+                                    }
+                                }
+                                if(itmp<cols*cols-cols){//Wenn unten noch Platz
+                                    if(llList2Integer(grid,itmp+cols)>0){//Unten daneben ist eine Insel (Also neue Bruecke)
+                                        xx = itmp % cols;
+                                        yy = (itmp-xx) / cols;
+                                        moveRezzer(startpos.x+(xx-cols/2)*abst+abst/2, startpos.y+(cols-yy)*abst);
+                                        llRezObject("Bridge",           //object name in inventory
+                                            startpos+<(xx-cols/2)*abst,(cols-yy)*abst-abst/2,0.3>,//position          
+                                            <0.0, 0.0, 0.0>,            //velocity
+                                            llEuler2Rot(<270, 0, 270> * DEG_TO_RAD), //rotation
+                                            -(itmp*100+llCeil(abst)));  //event parameter (Scalierung)
+                                    }
+                                }
+                                moveRezzer(startpos.x, startpos.y);
+                            }
+                        
+                        }
+                        grid=llListReplaceList(grid, [3], itmp, itmp);
+                        if(llGetListLength(searchGrid)>itmp) searchGrid=llListReplaceList(searchGrid, [3], itmp, itmp);
+                        ziel=itmp;
+                    }
+                }
+            }
+            else if(llListFindList(MENU_REZZED_MAIN + MENU_REZZED_OPTIONS, [message]) != -1){  // verifiziert die Wahl des Dialogs
+            
+                llSay(0, name + " hat sich fuer folgende Option entschieden: '" + message + "'."); // gibt die Antwort aus
+                //if (message == "Optionen...")
+                    //llDialog(id, "Waehle eine Option", MENU_REZZED_OPTIONS, CHANNEL); // zeigt das Untermenue auf Anfrage an
+                //else if (message == "...Zurueck")
+                    //llDialog(id, "Was moechtest du machen?", MENU_REZZED_MAIN, CHANNEL); // zeigt das Hauptmenue auf Nachfrage zurueck zu gehen
+    
+                if(message == "Backtracking"){
+                    llSay(0, "Backtracking-Suchalgorithmus gestartet!");
+                    llSetTimerEvent(autoCleanUp);  //Nach einer Stunde aufraeumen
+                    searchGrid=grid;    //Matrix mit Graph kopieren
+                    
+                    backtracking(start);
+                    if(!searched){
+                        searched=TRUE;
+                        MENU_REZZED_MAIN+=["Reset Graph"];
+                    }
+                }
+                else if(message == "Cleanup"){
+                    llSay(0, "Der Insel-Such-Graph wird aufgeraeumt!");
+                    llRegionSay(30028, "cleanup"); 
+                    state default;
+                }
+                else if(message == "Switch start and goal"){
+                    llSay(0, "Start und Ziel werden getauscht!");
+                    //llRegionSay(30028, "cleanup");
+                    
+                    itmp=ziel;
+                    ziel=start;
+                    start=itmp;
+                    
+                    grid=llListReplaceList(grid, [3], ziel, ziel);
+                    grid=llListReplaceList(grid, [2], start, start);
+    
+                    //Insel einfaerben
+                    setIsleColor(start,"B");
+                    setIsleColor(ziel,"G");
+                    
+                    //Da soll Schildkroete hin:
+                    integer xx = start % cols;
+                    integer yy = (start-xx) / cols;
+                    moveTurtle(xx,yy);
+        
+                    
+                }
+                else if(message == "Reset Graph"){
+                    llSay(0, "Der Insel-Such-Graph wird zurueckgesetzt!");
+                    MENU_REZZED_MAIN=llDeleteSubList(MENU_REZZED_MAIN,llGetListLength(MENU_REZZED_MAIN)-1,llGetListLength(MENU_REZZED_MAIN)-1);
+                    searched=FALSE;
+                    
+                    for(i=0; i<llGetListLength(grid); i++){
+                        
+                        itmp=llList2Integer(grid,i);
+     
+                        if(itmp>0){    //Hier wird wirklich gerezzd
+                            //Such-Schildkroete
+                            if(itmp==2){
+                                xx = i % cols;
+                                yy = (i-xx) / cols;
+                                moveTurtle(xx,yy);
+                                //Insel einfaerben
+                                setIsleColor(i,"B");
+                            }
+                            //else if(itmp!=llList2Integer(searchGrid,i)){//Nur wenn etwas veraendert wurde
+                                //Insel einfaerben
+                                if(itmp==1) setIsleColor(i,"W");
+                                else if(itmp==3) setIsleColor(i,"G");
+                            //}
+                        }
+                    }
+                }
+    
+            }
+            else llSay(0, name + " ungueltige Option ausgewaehlt '" + llToLower(message) + "'."); // eine ungueltige Wahl eines Dialogs
+        }
+    }
+    
+    
+    
+    state_exit(){
+        llListenRemove(listen_handle);
+    }
+}

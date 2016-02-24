@@ -1,0 +1,48 @@
+integer listen_handle;
+
+list str;
+
+default{
+    state_entry(){
+        listen_handle = llListen(30028, "", "", "");
+        llSitTarget(<0,0.3,1.4>, llEuler2Rot(<0, 0, 90> * DEG_TO_RAD));
+    }
+
+    on_rez(integer start_param){
+        //if(start_param>0) llSetPrimitiveParams([PRIM_ROTATION, llEuler2Rot(<0, 270, 0> * DEG_TO_RAD)]);
+        
+        //llSetPrimitiveParams([PRIM_SIZE, <0.5, 2.503, start_param>]);
+    }
+
+
+    touch_start(integer total_number){
+        
+        //notify "owner"
+        //llSay(37888, "rezagain");
+        //llDie();
+        //llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <1.0, 1.0, 1.0>, 1.0]);
+        //llSay(0, "TEST");
+    }
+    
+    listen( integer channel, string name, key id, string message ){
+        if(message=="cleanup") llDie();
+        else{
+            str=llParseString2List(message ,[","],[]);    
+            if(llList2String(str,0)=="Turtle"){
+                vector vec=<llList2Float(str,1), llList2Float(str,2), llList2Float(str,3)>;
+                vector pos=llGetPos();
+                if(pos.y<vec.y)      llSetPrimitiveParams([PRIM_ROTATION, llEuler2Rot(<0, 0,   0> * DEG_TO_RAD)]);
+                else if(pos.y>vec.y) llSetPrimitiveParams([PRIM_ROTATION, llEuler2Rot(<0, 0, 180> * DEG_TO_RAD)]);
+                else if(pos.x<vec.x) llSetPrimitiveParams([PRIM_ROTATION, llEuler2Rot(<0, 0, 270> * DEG_TO_RAD)]);
+                else if(pos.x>vec.x) llSetPrimitiveParams([PRIM_ROTATION, llEuler2Rot(<0, 0,  90> * DEG_TO_RAD)]);
+                llSetPrimitiveParams([PRIM_POSITION, vec]);    
+            }
+            //llSay(0,message);
+        }
+    }
+    
+    state_exit(){
+        llListenRemove(listen_handle);
+    }
+    
+}

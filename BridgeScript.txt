@@ -1,0 +1,68 @@
+integer listen_handle;
+integer index;
+integer size;
+integer horizontal;
+
+list str;
+
+default{
+    state_entry(){
+        
+        //llSetText("Touch me to destroy me", <0,1,0>, 1.0);
+        
+        //llTargetOmega( vector axis, float spinrate, float gain );
+        //llTargetOmega(<0.0,0.0,0.001>,TWO_PI,1.0);
+        listen_handle = llListen(30028, "", "", "");
+    }
+
+    on_rez(integer start_param){
+        //if(start_param>0){
+            //llSetPrimitiveParams([PRIM_ROTATION, llEuler2Rot(<0, 270, 0> * DEG_TO_RAD)]);
+        //}
+        //else{
+            //llSetPrimitiveParams([PRIM_ROTATION, llEuler2Rot(<270, 0, 270> * DEG_TO_RAD)]);
+            //start_param*=-1;
+        //}
+        
+        if(start_param<0){
+            horizontal=FALSE;
+            start_param*=-1;
+        }
+        else horizontal=TRUE;
+        
+        size = start_param%100;
+        index = (start_param-size)/100;
+        
+        llSetPrimitiveParams([PRIM_SIZE, <0.5, 2.503, size>]);
+    }
+
+
+    touch_start(integer total_number){
+        
+        //notify "owner"
+        //llSay(37888, "rezagain");
+        //llDie();
+        llSetPrimitiveParams([PRIM_COLOR, ALL_SIDES, <1.0, 1.0, 1.0>, 1.0]);
+        //llSay(0, "TEST");
+    }
+    
+    listen( integer channel, string name, key id, string message ){
+        if(message=="cleanup") llDie();
+        else{
+            str=llParseString2List(message ,[","],[]);    
+            if(llList2String(str,0)=="KillBridge"){
+                if(llList2Integer(str,1)==index){
+                    if(llList2Integer(str,2)==horizontal){
+                        llDie(); 
+                    } 
+                }  
+            }
+            //llSay(0,message);
+        }
+    }
+    
+    state_exit(){
+        llListenRemove(listen_handle);
+    }
+    
+}
